@@ -1,0 +1,16 @@
+customtkinter>=5.2.0
+opencv-python>=4.9.0
+pyttsx3>=2.90
+arabic-reshaper>=3.0.0
+python-bidi>=0.4.2
+gTTS>=2.5.0
+# الوضع الحر (تعرّف صوتي حقيقي على سؤال المحاور، راجع listen_for_question
+# في practice_session.py): sounddevice بدل PyAudio لتسجيل الميكروفون (أسهل
+# تثبيتًا على ويندوز، خصوصًا مع إصدارات بايثون الحديثة)، وSpeechRecognition
+# للاتصال بخدمة Google Web Speech (يحتاج إنترنت، بلا مفتاح API).
+sounddevice>=0.4.6
+SpeechRecognition>=3.10.0
+# تتبع اليد الحقيقي (HandTracker في practice_session.py، بدل مربع ثابت
+# بمنتصف الشاشة) عبر MediaPipe Tasks. يحتاج أيضًا ملف نموذج محلي غير
+# مُضمَّن هنا لحجمه -- راجع README قسم "تفعيل تتبع اليد الحقيقي".
+mediapipe>=0.10.9

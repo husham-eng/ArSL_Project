@@ -1,0 +1,25 @@
+{
+  "scenarios": [
+    {"id": 1,  "question": "مرحبا",                       "expected_answer": "مرحبا"},
+    {"id": 2,  "question": "هل تحتاج مساعدة أكثر؟",         "expected_answer": "لا"},
+    {"id": 3,  "question": "ما اسمك؟",                     "expected_answer": "هشام"},
+    {"id": 4,  "question": "هل اسمك أحمد؟",                "expected_answer": "لا"},
+    {"id": 5,  "question": "هل اسمك هشام؟",                "expected_answer": "نعم"},
+    {"id": 6,  "question": "أين تدرس؟",                    "expected_answer": "جامعة"},
+    {"id": 7,  "question": "هل أنت طالب؟",                 "expected_answer": "نعم"},
+    {"id": 8,  "question": "من أين أتيت اليوم؟",            "expected_answer": "بيت"},
+    {"id": 9,  "question": "أين الباب؟",                   "expected_answer": "باب"},
+    {"id": 10, "question": "هل عندك أخ؟",                  "expected_answer": "ولد"},
+    {"id": 11, "question": "ماذا تحمل بيدك؟",              "expected_answer": "كتاب"},
+    {"id": 12, "question": "وماذا أيضًا معك؟",             "expected_answer": "قلم"},
+    {"id": 13, "question": "من يعالجك في المستشفى؟",       "expected_answer": "دكتور"},
+    {"id": 14, "question": "ومن يساعد الدكتور؟",           "expected_answer": "ممرضة"},
+    {"id": 15, "question": "هل أنت متعب اليوم؟",           "expected_answer": "لا"},
+    {"id": 16, "question": "هل تريد الذهاب للمستشفى؟",     "expected_answer": "نعم"},
+    {"id": 17, "question": "ما اسم صديقك؟",                "expected_answer": "خالد"},
+    {"id": 18, "question": "من معك اليوم؟",                "expected_answer": "عمر"},
+    {"id": 19, "question": "هل اسم أختك سارة؟",            "expected_answer": "نعم"},
+    {"id": 20, "question": "شكرا لك، إلى اللقاء",           "expected_answer": "شكرا"}
+  ],
+  "note": "All 20 scenarios verified against spelling_correction.py (Section: test with a perfect signing simulation and a simulated single-letter classification error). Every expected_answer exists in MINI_ARABIC_DICTIONARY and every scenario resolves correctly, including under noise. See src/letter_to_word/spelling_correction.py for the dictionary source."
+}

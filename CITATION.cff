@@ -1,0 +1,20 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+title: "Arabic Sign Language Interpretation Assistant: A Grayscale/Color Fusion Pipeline with Contextual Word Correction and Privacy-Preserving Personal Assistance"
+type: software
+authors:
+  - family-names: "REPLACE_WITH_YOUR_FAMILY_NAME"          # TODO before publishing
+    given-names: "REPLACE_WITH_YOUR_GIVEN_NAME"             # TODO before publishing
+    affiliation: "REPLACE_WITH_YOUR_UNIVERSITY_OR_INSTITUTION"  # TODO before publishing
+    orcid: "https://orcid.org/0000-0000-0000-0000"   # optional, remove line if you don't have one
+repository-code: "https://github.com/REPLACE_WITH_YOUR_USERNAME/REPLACE_WITH_YOUR_REPO_NAME"  # TODO before publishing
+license: MIT
+version: 0.2.0
+date-released: "2026-09-22"
+keywords:
+  - arabic sign language
+  - assistive technology
+  - convolutional neural networks
+  - transfer learning
+  - accessibility
+  - human-computer interaction

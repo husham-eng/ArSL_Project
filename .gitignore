@@ -1,0 +1,35 @@
+# بيئات بايثون الافتراضية -- كل واحد يبنيها محليًا من requirements.txt
+.venv/
+venv/
+env/
+__pycache__/
+*.pyc
+
+# نماذج مدرَّبة (.pt) -- ملفات ثنائية كبيرة، تُرفع كـ Release Assets على
+# GitHub لا ضمن سجل Git نفسه (راجع README قسم "Before publishing")
+*.pt
+*.pth
+
+# نموذج تتبع اليد (~8MB) -- يُحمَّل يدويًا من رابط Google الرسمي، راجع
+# README قسم "Enabling real hand tracking"
+app/models/*.task
+
+# قواعد البيانات وسجلات الاستخدام الفعلي -- تحتوي بيانات تجارب حقيقية،
+# لا تُشارك علنًا بدون مراجعة/إخفاء هوية أولًا (راجع قسم المتطوعين بالورقة)
+*.db
+classification_log.db
+
+# لقطات التوثيق الحية -- صور حقيقية من جلسات اختبار فعلية، تُراجع وتُختار
+# يدويًا للورقة بدل رفعها كلها تلقائيًا
+screenshots/*.png
+screenshots/*.txt
+screenshots/*.zip
+
+# ملفات التغليف (PyInstaller) -- الناتج يُبنى محليًا من packaging/، ثقيل
+# وغير مطلوب بسجل Git. ملف .spec نفسه (إعدادات البناء) صغير ويبقى.
+build/
+dist/
+
+# ملفات النظام
+.DS_Store
+Thumbs.db

@@ -1,0 +1,217 @@
+{
+  "dataset": "AASL (Arabic Alphabet Sign Language) - Colored RGB dataset",
+  "source": "https://www.kaggle.com/datasets/muhammadalbrham/rgb-arabic-alphabets-sign-language-dataset",
+  "license": "CC BY-NC-SA 4.0 (non-commercial)",
+  "expected_total_images": 7857,
+  "expected_total_classes": 31,
+  "verification_method": "np.array_equal(R,G,B) on RGB-converted sample per class; PIL .verify() for corruption check",
+  "batches": [
+    {
+      "batch_num": 1,
+      "classes": {
+        "Ain_11": {
+          "count": 244,
+          "verified_color_rgb": true,
+          "corrupt_found": false
+        },
+        "Al_1": {
+          "count": 276,
+          "verified_color_rgb": true,
+          "corrupt_found": false
+        },
+        "Alef_13": {
+          "count": 287,
+          "verified_color_rgb": true,
+          "corrupt_found": false
+        },
+        "Beh_11": {
+          "count": 307,
+          "verified_color_rgb": true,
+          "corrupt_found": false
+        },
+        "Dad_12": {
+          "count": 266,
+          "verified_color_rgb": true,
+          "corrupt_found": false
+        }
+      }
+    },
+    {
+      "batch_num": 2,
+      "classes": {
+        "Dal_13": {
+          "count": 235,
+          "verified_color_rgb": true,
+          "corrupt_found": false
+        },
+        "Feh_10": {
+          "count": 255,
+          "verified_color_rgb": true,
+          "corrupt_found": false
+        },
+        "Ghain_20": {
+          "count": 230,
+          "verified_color_rgb": true,
+          "corrupt_found": false
+        },
+        "Hah_14": {
+          "count": 246,
+          "verified_color_rgb": true,
+          "corrupt_found": false
+        },
+        "Heh_21": {
+          "count": 253,
+          "verified_color_rgb": true,
+          "corrupt_found": false
+        }
+      }
+    },
+    {
+      "batch_num": 3,
+      "classes": {
+        "Jeem_12": {
+          "count": 210,
+          "verified_color_rgb": true,
+          "corrupt_found": false
+        },
+        "Kaf_4": {
+          "count": 264,
+          "verified_color_rgb": true,
+          "corrupt_found": false
+        },
+        "Khah_21": {
+          "count": 250,
+          "verified_color_rgb": true,
+          "corrupt_found": false
+        },
+        "Laa_12": {
+          "count": 268,
+          "verified_color_rgb": true,
+          "corrupt_found": false
+        }
+      }
+    },
+    {
+      "batch_num": 4,
+      "classes": {
+        "Lam_11": {
+          "count": 260,
+          "verified_color_rgb": true,
+          "corrupt_found": false
+        },
+        "Meem_13": {
+          "count": 253,
+          "verified_color_rgb": true,
+          "corrupt_found": false
+        },
+        "Noon_12": {
+          "count": 237,
+          "verified_color_rgb": true,
+          "corrupt_found": false
+        },
+        "Qaf_13": {
+          "count": 219,
+          "verified_color_rgb": true,
+          "corrupt_found": false
+        },
+        "Reh_12": {
+          "count": 227,
+          "verified_color_rgb": true,
+          "corrupt_found": false
+        }
+      }
+    },
+    {
+      "batch_num": 5,
+      "classes": {
+        "Sad_14": {
+          "count": 270,
+          "verified_color_rgb": true,
+          "corrupt_found": false
+        },
+        "Seen_12": {
+          "count": 266,
+          "verified_color_rgb": true,
+          "corrupt_found": false
+        },
+        "Sheen_12": {
+          "count": 278,
+          "verified_color_rgb": true,
+          "corrupt_found": false
+        },
+        "Tah_11": {
+          "count": 226,
+          "verified_color_rgb": true,
+          "corrupt_found": false
+        },
+        "Teh_13": {
+          "count": 311,
+          "verified_color_rgb": true,
+          "corrupt_found": false
+        }
+      }
+    },
+    {
+      "batch_num": 6,
+      "classes": {
+        "Teh_Marbuta_13": {
+          "count": 257,
+          "verified_color_rgb": true,
+          "corrupt_found": false
+        },
+        "thal_13": {
+          "count": 202,
+          "verified_color_rgb": true,
+          "corrupt_found": false
+        },
+        "Theh_12": {
+          "count": 305,
+          "verified_color_rgb": true,
+          "corrupt_found": false
+        },
+        "Waw_11": {
+          "count": 249,
+          "verified_color_rgb": true,
+          "corrupt_found": false
+        }
+      }
+    },
+    {
+      "batch_num": 7,
+      "classes": {
+        "Yeh_20": {
+          "count": 272,
+          "verified_color_rgb": true,
+          "corrupt_found": false
+        },
+        "Zah_21": {
+          "count": 232,
+          "verified_color_rgb": true,
+          "corrupt_found": false
+        },
+        "Zain_21": {
+          "count": 201,
+          "verified_color_rgb": true,
+          "corrupt_found": false
+        }
+      }
+    }
+  ],
+  "notes": [
+    "All sampled images across both batches are confirmed genuinely colored (R!=G!=B channels), unlike ArASL which is grayscale-triplicated. This confirms the ModalityFusionModel/ColorSignCNN premise in section 5 of the project summary is based on verified real data, not assumption.",
+    "Image dimensions are highly non-uniform across contributors (ranging roughly 576x957 to 4896x6528) - explicit Resize/transform required before CNN training, no assumption of fixed input size.",
+    "File extensions are inconsistent in case: .jpg, .JPG, .jpeg, .JPEG all appear across classes - directory scanning code (image_cnn_dataset.py logic) must do case-insensitive extension matching or it will silently skip files.",
+    "No corrupted files found in samples checked so far (6 images sampled per class via PIL .verify())."
+  ],
+  "running_total_images_uploaded": 7856,
+  "running_total_classes_uploaded": 31,
+  "remaining_classes_expected": 0,
+  "remaining_images_expected_approx": 1,
+  "upload_status": "COMPLETE - all 31 classes uploaded and verified",
+  "reconciliation": {
+    "note": "AASL's 31 classes = 28 standard Arabic letters + 3 extra ligature/compound classes (Al, Laa, Teh_Marbuta) seen in this dataset's folder naming convention.",
+    "standard_letters_missing": [],
+    "extra_classes_missing": [],
+    "image_count_gap_vs_expected": 1
+  }
+}
