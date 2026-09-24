@@ -1,4 +1,4 @@
-cff-version: 0.2.0
+cff-version: 1.2.0
 message: "If you use this software, please cite it as below."
 title: "Arabic Sign Language Interpretation Assistant: A Grayscale/Color Fusion Pipeline with Contextual Word Correction and Privacy-Preserving Personal Assistance"
 type: software
