@@ -160,6 +160,15 @@ STT_SAMPLE_RATE = 16000      # هرتز — معدل قياسي مقبول لخ�
 # في spelling_correction.py) لحساب نسبة تغطية الاكتشاف بالكلمة كاملة.
 CAPTURE_INTERVAL_SEC = 2.0
 CAPTURE_STABILITY_RATIO = 0.6  # نسبة الإطارات داخل الدورة الواحدة اللي لازم تتفق على نفس الحرف لاعتماده
+# --- مدة الدورة في وضع الاختبار الميداني فقط ---
+# بالاختبار الميداني يتغيّر الحرف المطلوب مع كل دورة، فالمتطوّع يحتاج وقتًا
+# ليقرأ الحرف الجديد ويشكّل يده ثم يثبّتها. البروفة الأولى (V00، بمدة
+# CAPTURE_INTERVAL_SEC = 2 ث) أظهرت أن ثانيتين غير كافيتين لهذا الانتقال،
+# فتُحسب إطارات الانتقال ضمن التصويت ويُظلَم النموذج. البروفة الثانية
+# (V00b، 4 ث) بقيت غير كافية حسب تقدير المُختبِر، فاعتُمدت 6 ثوانٍ: تجعل
+# إطارات الإشارة المثبّتة أغلبية واضحة داخل الدورة. وضع التمرين العادي لا يتأثر
+# (يبقى على CAPTURE_INTERVAL_SEC)، لأن المستخدم هناك يهجّئ كلمة يعرفها مسبقًا.
+FIELD_TEST_INTERVAL_SEC = 6.0
 # --- نهاية الكلمة: مهلة صارمة، لا احتياطية ---
 # بمجرد مرور WORD_RECOGNITION_TIMEOUT_SEC ثانية بالضبط من بداية اكتشاف
 # الكلمة (لحظة أول دورة التقاط، لا أول حرف مؤكَّد -- راجع _tick_capture_cycle)،
@@ -169,7 +178,13 @@ CAPTURE_STABILITY_RATIO = 0.6  # نسبة الإطارات داخل الدورة
 # حرف). زر "أنهِ الكلمة الآن" اليدوي يبقى متاحًا لإنهاء الكلمة قبل
 # الوصول لهذي المهلة، لا بديلًا عنها.
 WORD_RECOGNITION_TIMEOUT_SEC = 10.0
-CONFIDENCE_THRESHOLD = 0.6
+# خُفِّض من 0.6 إلى 0.4 بعد البروفات الميدانية (V00b/V00c): تحت إضاءة وخلفية
+# غرفة حقيقية، كانت ثقة النموذج بالحرف الصحيح تقع غالبًا بين 0.4 و0.6، فكانت
+# دورات كاملة تنتهي بـ"0" رغم أن النموذج يتعرّف على الحرف فعليًا. للحفاظ على
+# الصرامة المنهجية، الاختبار الميداني يحفظ أيضًا كل تنبؤات الإطارات الخام
+# (عمود frame_predictions)، فتُعاد حسابات الدقة لاحقًا عند أي حدّ ثقة آخر
+# (مثلًا 0.6 الأصلي) من نفس البيانات، بدل الاعتماد على هذي القيمة وحدها.
+CONFIDENCE_THRESHOLD = 0.4
 MAX_WORD_PREDICTIONS = 5  # عدد الكلمات المقترحة المعروضة أثناء التهجئة الحية
 
 # نموذج GrayscaleCNN اتدرّب على صور ArASL: يد مقصوصة فقط على خلفية بسيطة،
@@ -1212,11 +1227,17 @@ class PracticeApp(ctk.CTk):
             text=ar(f"🧪 اختبار ميداني — المتطوّع: {self._field_test_volunteer_id}")
         )
 
-    def _record_field_test_result(self, predicted_label, confidence):
+    def _record_field_test_result(self, predicted_label, confidence, window_preds=()):
         """يُستدعى من _tick_capture_cycle بمجرد إغلاق دورة الالتقاط الواحدة
         المخصَّصة للحرف المستهدف الحالي -- يسجّل الحقيقة الأرضية مقابل
         تنبؤ النموذج، ثم ينتقل للحرف التالي تلقائيًا، أو ينهي الاختبار لو
         كان هذا آخر حرف بالتسلسل."""
+        # window_preds: كل تنبؤات الإطارات بهذي الدورة (حرف، ثقة) قبل أي فلترة.
+        # تُحفظ منها ثلاث أعمدة تشخيصية تفرّق بين أسباب الفشل المختلفة، لأن
+        # "0" وحده بالنتيجة لا يميّز بينها: frames_total = 0 يعني لم تُكتشف
+        # يد إطلاقًا؛ frames_confident = 0 مع raw_majority_letter صحيح يعني
+        # النموذج عرف الحرف لكن بثقة أقل من CONFIDENCE_THRESHOLD؛ وframes_confident
+        # > 0 بلا فائز يعني تذبذب بين حروف (عدم استقرار الإشارة أو ضيق الوقت).
         target_key = self._field_test_sequence[self._field_test_index]
         target_letter = ARASL_TO_ARABIC.get(target_key, "?")
         correct = (predicted_label == target_letter)
@@ -1230,6 +1251,15 @@ class PracticeApp(ctk.CTk):
             "correct": correct,
             "model_used": self.model_used_label or "unknown",
             "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
+            "frames_total": len(window_preds),
+            "frames_confident": sum(1 for _, c in window_preds if c >= CONFIDENCE_THRESHOLD),
+            "raw_majority_letter": (
+                Counter(l for l, _ in window_preds).most_common(1)[0][0] if window_preds else ""
+            ),
+            "confidence_threshold": CONFIDENCE_THRESHOLD,
+            "frame_predictions": json.dumps(
+                [[l, round(c, 3)] for l, c in window_preds], ensure_ascii=False
+            ),
         })
 
         mark = "✅" if correct else "❌"
@@ -1265,6 +1295,8 @@ class PracticeApp(ctk.CTk):
             writer = csv.DictWriter(f, fieldnames=[
                 "volunteer_id", "target_key", "target_letter", "predicted_letter",
                 "confidence", "correct", "model_used", "timestamp",
+                "frames_total", "frames_confident", "raw_majority_letter",
+                "confidence_threshold", "frame_predictions",
             ])
             writer.writeheader()
             writer.writerows(self._field_test_results)
@@ -1576,11 +1608,12 @@ class PracticeApp(ctk.CTk):
             return
 
         elapsed = now - self._capture_window_start
-        remaining = max(0.0, CAPTURE_INTERVAL_SEC - elapsed)
+        interval = FIELD_TEST_INTERVAL_SEC if self._field_test_active else CAPTURE_INTERVAL_SEC
+        remaining = max(0.0, interval - elapsed)
         self.cycle_countdown_label.configure(
             text=ar(f"⏱ الدورة التالية خلال: {remaining:.1f} ث")
         )
-        if elapsed < CAPTURE_INTERVAL_SEC:
+        if elapsed < interval:
             return
 
         # --- إغلاق الدورة: تصويت أغلبية على تنبؤات هذي الدورة فقط (نفس
@@ -1595,7 +1628,7 @@ class PracticeApp(ctk.CTk):
                 winner_conf = sum(c for l, c in confident if l == top_label) / top_count
 
         if self._field_test_active:
-            self._record_field_test_result(winner_label, winner_conf)
+            self._record_field_test_result(winner_label, winner_conf, list(self._capture_window_preds))
             self._capture_window_start = time.time()
             self._capture_window_preds = []
             return
