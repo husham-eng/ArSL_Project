@@ -1,4 +1,4 @@
-cff-version: 1.2.0
+cff-version: 0.2.0
 message: "If you use this software, please cite it as below."
 title: "Arabic Sign Language Interpretation Assistant: A Grayscale/Color Fusion Pipeline with Contextual Word Correction and Privacy-Preserving Personal Assistance"
 type: software
@@ -7,10 +7,11 @@ authors:
     given-names: "HUSHAM"             # TODO before publishing
     affiliation: "Prince Sultan Military College of Health Sciences"  # TODO before publishing
     orcid: "https://orcid.org/0000-0001-7642-5791"   # optional, remove line if you don't have one
-repository-code: "https://github.com/REPLACE_WITH_YOUR_USERNAME/REPLACE_WITH_YOUR_REPO_NAME"  # TODO before publishing
+repository-code: "https://github.com/husham-eng/ArSL_Project"  # TODO before publishing
 license: MIT
 version: 0.2.0
 date-released: "2026-09-22"
+doi: "10.5281/zenodo.22929535"
 keywords:
   - arabic sign language
   - assistive technology
