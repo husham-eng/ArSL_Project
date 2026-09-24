@@ -39,13 +39,16 @@ Requirements beyond the core repo (see app/requirements_app.txt):
 import json
 import os
 import queue
+import random
 import shutil
 import sys
 import tempfile
 from collections import Counter
+import csv
 import threading
 import time
 import tkinter as tk
+from tkinter import simpledialog
 
 import cv2
 import customtkinter as ctk
@@ -647,6 +650,12 @@ class PracticeApp(ctk.CTk):
         # None يعني لم يُستمع لأي سؤال بعد في هذه المحادثة، وفي هذه الحالة
         # guess_word_with_context() تعمل بدون سياق بدل استخدام نص وهمي.
         self._current_question = None
+        # --- وضع الاختبار الميداني (راجع start_field_test أدناه) ---
+        self._field_test_active = False
+        self._field_test_volunteer_id = None
+        self._field_test_sequence = []   # ترتيب الحروف الـ32 العشوائي لهذا المتطوّع تحديدًا
+        self._field_test_index = 0
+        self._field_test_results = []    # كل عنصر: dict بمفاتيح target/predicted/confidence/correct
         self.predictor = None
         self.model_used_label = None
         self.hand_tracker = None
@@ -842,6 +851,16 @@ class PracticeApp(ctk.CTk):
         ctk.CTkButton(
             controls_row2, text=ar("📸 التقط لقطة للتوثيق"), command=self.capture_documentation_screenshot,
             fg_color="#6a4fb3", hover_color="#7f5fd6",
+        ).pack(side="left", padx=5)
+        # وضع الاختبار الميداني: يمرّر المتطوّع على الـ32 حرف بترتيب عشوائي
+        # (مختلف لكل متطوّع)، ويسجّل تلقائيًا الحرف الحقيقي المطلوب مقابل
+        # تنبؤ النموذج + الثقة -- بيانات "الحقيقة الأرضية" اللازمة لحساب
+        # دقة حقيقية متعددة المشاركين، لا يوفّرها سجل classification_log.db
+        # العادي وحده (يسجّل التنبؤ فقط، بدون معرفة الحرف المقصود فعليًا).
+        # راجع _start_field_test / _tick_capture_cycle أدناه.
+        ctk.CTkButton(
+            controls_row2, text=ar("🧪 اختبار ميداني"), command=self.start_field_test,
+            fg_color="#1e8449", hover_color="#27ae60",
         ).pack(side="left", padx=5)
 
         # ---- right: chat-style conversation ----
@@ -1129,6 +1148,135 @@ class PracticeApp(ctk.CTk):
             font=("Tahoma", 11), text_color="#777777",
         ).pack(side="right", padx=14)
 
+    # --------------------------------------------------------- field test
+
+    def start_field_test(self):
+        """يبدأ جلسة اختبار ميداني لمتطوّع واحد: يمرّره على الـ32 حرف
+        بترتيب عشوائي مختلف لكل متطوّع (يمنع أي تحيّز ترتيب منهجي عبر
+        العينة كاملة)، ويسجّل لكل حرف: الحرف الحقيقي المطلوب (الحقيقة
+        الأرضية)، تنبؤ النموذج، الثقة، وهل كان التنبؤ صحيحًا -- بيانات
+        دقة حقيقية جاهزة للتحليل الإحصائي بالورقة العلمية، بخلاف
+        classification_log.db العادي (يسجّل التنبؤ فقط بدون معرفة الحرف
+        المقصود فعليًا، فلا يكفي وحده لحساب دقة صحيحة)."""
+        if self.camera_running is False:
+            self.letter_status.configure(text=ar("⚠️ ابدأ الكاميرا أولًا قبل الاختبار الميداني"))
+            return
+        if self.predictor is None:
+            self.letter_status.configure(text=ar("⚠️ النموذج لسه ما جهز، انتظر شوي وحاول مرة ثانية"))
+            return
+
+        volunteer_id = simpledialog.askstring(
+            ar("اختبار ميداني"), ar("رقم/اسم المتطوّع:"), parent=self,
+        )
+        if not volunteer_id:
+            return  # ألغى المستخدم، لا نبدأ شيء
+
+        self._field_test_active = True
+        self._field_test_volunteer_id = volunteer_id.strip()
+        self._field_test_sequence = list(ARASL_TO_ARABIC.keys())
+        random.shuffle(self._field_test_sequence)  # ترتيب عشوائي خاص بهذا المتطوّع تحديدًا
+        self._field_test_index = 0
+        self._field_test_results = []
+
+        # يُوقَف تهجئة الكلمة العادية تمامًا أثناء الاختبار (لا تعارض بين
+        # الوضعين)، ويُصفَّر عدّاد الكلمة/الدورة كي لا تتسرّب حالة سابقة.
+        self.word_buffer = []
+        self.captured_slots = []
+        self._capture_window_start = None
+        self._capture_window_preds = []
+        self._word_start_time = None
+
+        self._show_field_test_target()
+
+    def _show_field_test_target(self):
+        """يعرض الحرف المستهدف الحالي بشريط الدليل (نفس مساحة دليل
+        الإشارة العادي، بما إنه غير مستخدم أثناء الاختبار الميداني):
+        صورة اليد الحقيقية الكبيرة + اسم الحرف + رقم التقدّم بالتسلسل."""
+        for widget in self.hint_strip.winfo_children():
+            widget.destroy()
+
+        key = self._field_test_sequence[self._field_test_index]
+        photo = self.hand_sign_photos.get(key)
+        cell = ctk.CTkFrame(self.hint_strip, fg_color="transparent")
+        cell.pack(expand=True, pady=6)
+        if photo is not None:
+            tk.Label(cell, image=photo, bg="#101010").pack()
+        ctk.CTkLabel(
+            cell,
+            text=ar(f"أشِر بحرف: {ARASL_TO_ARABIC.get(key, '?')}  —  "
+                    f"{self._field_test_index + 1} / {len(self._field_test_sequence)}"),
+            font=("Tahoma", 16, "bold"), text_color="#f1c40f",
+        ).pack(pady=(4, 0))
+
+        self.word_status.configure(
+            text=ar(f"🧪 اختبار ميداني — المتطوّع: {self._field_test_volunteer_id}")
+        )
+
+    def _record_field_test_result(self, predicted_label, confidence):
+        """يُستدعى من _tick_capture_cycle بمجرد إغلاق دورة الالتقاط الواحدة
+        المخصَّصة للحرف المستهدف الحالي -- يسجّل الحقيقة الأرضية مقابل
+        تنبؤ النموذج، ثم ينتقل للحرف التالي تلقائيًا، أو ينهي الاختبار لو
+        كان هذا آخر حرف بالتسلسل."""
+        target_key = self._field_test_sequence[self._field_test_index]
+        target_letter = ARASL_TO_ARABIC.get(target_key, "?")
+        correct = (predicted_label == target_letter)
+
+        self._field_test_results.append({
+            "volunteer_id": self._field_test_volunteer_id,
+            "target_key": target_key,
+            "target_letter": target_letter,
+            "predicted_letter": predicted_label if predicted_label is not None else "",
+            "confidence": round(confidence, 4),
+            "correct": correct,
+            "model_used": self.model_used_label or "unknown",
+            "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
+        })
+
+        mark = "✅" if correct else "❌"
+        row = ctk.CTkFrame(self.chat_frame, fg_color="transparent")
+        row.pack(fill="x", pady=1)
+        ctk.CTkLabel(
+            row, text=ar(f"{mark} {target_letter} → {predicted_label or '0'} ({confidence:.2f})"),
+            font=("Tahoma", 11), text_color="#999999",
+        ).pack(side="right", padx=14)
+
+        self._field_test_index += 1
+        if self._field_test_index >= len(self._field_test_sequence):
+            self._finish_field_test()
+        else:
+            self._show_field_test_target()
+
+    def _finish_field_test(self):
+        """يُنهي الاختبار: يحسب الدقة الإجمالية، يحفظ النتائج التفصيلية
+        كملف CSV حقيقي (جاهز للتحليل الإحصائي وإعادة الاستخدام بالورقة
+        العلمية)، ويعرض ملخصًا فوريًا، ثم يعيد الواجهة لوضعها الطبيعي."""
+        self._field_test_active = False
+        n = len(self._field_test_results)
+        n_correct = sum(1 for r in self._field_test_results if r["correct"])
+        accuracy = (n_correct / n) if n else 0.0
+
+        out_dir = os.path.join(WRITE_DIR, "field_test_results")
+        os.makedirs(out_dir, exist_ok=True)
+        safe_id = "".join(c if c.isalnum() else "_" for c in self._field_test_volunteer_id)
+        out_path = os.path.join(
+            out_dir, f"{safe_id}_{time.strftime('%Y%m%d_%H%M%S')}.csv"
+        )
+        with open(out_path, "w", newline="", encoding="utf-8-sig") as f:
+            writer = csv.DictWriter(f, fieldnames=[
+                "volunteer_id", "target_key", "target_letter", "predicted_letter",
+                "confidence", "correct", "model_used", "timestamp",
+            ])
+            writer.writeheader()
+            writer.writerows(self._field_test_results)
+
+        self._add_bubble(
+            f"انتهى الاختبار الميداني — المتطوّع {self._field_test_volunteer_id}",
+            sender="signer",
+            caption=f"الدقة: {n_correct}/{n} ({accuracy:.1%}) | حُفظت التفاصيل في: {out_path}",
+        )
+        self.word_status.configure(text=ar("الكلمة الحالية: —"))
+        self._render_hint_strip()  # يعيد شريط الدليل لوضعه الطبيعي (وضع التهجئة العادي)
+
     def next_scenario(self):
         if self.free_mode_var.get():
             return
@@ -1280,8 +1428,11 @@ class PracticeApp(ctk.CTk):
             # بالضبط منذ بداية اكتشاف هذي الكلمة (لا من أول حرف مؤكَّد --
             # راجع _tick_capture_cycle)، يتوقف الاكتشاف والتصنيف فورًا،
             # وتبدأ حركة الانكماش بدل الاستمرار بالتصنيف العادي لهذا الإطار.
+            # مُعطَّل أثناء الاختبار الميداني -- له إيقاعه الخاص (دورة واحدة
+            # بالضبط لكل حرف)، لا داعي لمهلة الكلمة العادية هناك إطلاقًا.
             if (
-                self._word_start_time is not None
+                not self._field_test_active
+                and self._word_start_time is not None
                 and (time.time() - self._word_start_time) >= WORD_RECOGNITION_TIMEOUT_SEC
             ):
                 self._start_end_of_word_animation(frame_rgb, (x1, y1, x2, y2))
@@ -1432,7 +1583,8 @@ class PracticeApp(ctk.CTk):
         if elapsed < CAPTURE_INTERVAL_SEC:
             return
 
-        # --- إغلاق الدورة: تصويت أغلبية على تنبؤات هذي الدورة فقط ---
+        # --- إغلاق الدورة: تصويت أغلبية على تنبؤات هذي الدورة فقط (نفس
+        # المنطق يُستخدم أيضًا بوضع الاختبار الميداني أدناه) ---
         confident = [(lbl, conf) for lbl, conf in self._capture_window_preds if conf >= CONFIDENCE_THRESHOLD]
         winner_label, winner_conf = None, 0.0
         if confident:
@@ -1441,6 +1593,12 @@ class PracticeApp(ctk.CTk):
             if top_count / len(confident) >= CAPTURE_STABILITY_RATIO:
                 winner_label = top_label
                 winner_conf = sum(c for l, c in confident if l == top_label) / top_count
+
+        if self._field_test_active:
+            self._record_field_test_result(winner_label, winner_conf)
+            self._capture_window_start = time.time()
+            self._capture_window_preds = []
+            return
 
         self.captured_slots.append({"letter": winner_label, "confidence": winner_conf})
         self._log_cycle_result(winner_label)  # يظهر بسجل الحوار فورًا: الحرف أو "0"
