@@ -33,3 +33,7 @@ dist/
 # ملفات النظام
 .DS_Store
 Thumbs.db
+
+# Field test data: volunteer results are private; pilot data kept local
+field_test_results/
+field_test_rehearsal/
