@@ -1,0 +1,84 @@
+FIELD TEST SUMMARY
+============================================================
+Files: 10 | Volunteers: 10 | Attempts: 320
+Confidence threshold recorded in files: 0.4
+
+OVERALL ACCURACY: 202/320 = 63.1%  (95% Wilson CI 57.7% - 68.2%)
+Per-volunteer mean accuracy: 63.1% +/- 7.9% (SD), range 50.0% - 71.9%
+
+PER-VOLUNTEER
+  v01: 18/32 = 56.2%
+  v02: 21/32 = 65.6%
+  v03: 23/32 = 71.9%
+  v04: 23/32 = 71.9%
+  v05: 22/32 = 68.8%
+  v06: 18/32 = 56.2%
+  v07: 19/32 = 59.4%
+  v08: 19/32 = 59.4%
+  v09: 23/32 = 71.9%
+  v10: 16/32 = 50.0%
+
+FAILURE CAUSES
+  correct: 202 (63.1%)
+  no stable majority: 71 (22.2%)
+  wrong letter accepted: 47 (14.7%)
+
+PER-LETTER ACCURACY (hardest first; most frequent wrong outcome)
+  ذ: 0/10 = 0%   -> ع
+  و: 0/10 = 0%   -> ∅
+  ى: 0/10 = 0%   -> ي
+  ث: 1/10 = 10%   -> ∅
+  ج: 1/10 = 10%   -> ∅
+  ط: 1/10 = 10%   -> ∅
+  ظ: 1/10 = 10%   -> ∅
+  ح: 3/10 = 30%   -> ∅
+  د: 4/10 = 40%   -> ∅
+  ز: 4/10 = 40%   -> ∅
+  ال: 6/10 = 60%   -> ∅
+  خ: 6/10 = 60%   -> غ
+  ف: 6/10 = 60%   -> ∅
+  لا: 6/10 = 60%   -> ∅
+  ة: 8/10 = 80%   -> ∅
+  ق: 8/10 = 80%   -> ∅
+  ك: 8/10 = 80%   -> س
+  ن: 8/10 = 80%   -> ∅
+  ي: 8/10 = 80%   -> ∅
+  ر: 9/10 = 90%   -> ح
+  ش: 9/10 = 90%   -> ∅
+  ص: 9/10 = 90%   -> ∅
+  ع: 9/10 = 90%   -> ت
+  غ: 9/10 = 90%   -> ع
+  م: 9/10 = 90%   -> ∅
+  ه: 9/10 = 90%   -> ∅
+  أ: 10/10 = 100%
+  ب: 10/10 = 100%
+  ت: 10/10 = 100%
+  س: 10/10 = 100%
+  ض: 10/10 = 100%
+  ل: 10/10 = 100%
+
+MOST FREQUENT CONFUSIONS (target -> accepted wrong letter)
+  ى -> ي: 10
+  ذ -> ع: 4
+  ح -> ع: 3
+  خ -> غ: 3
+  و -> أ: 2
+  ظ -> ل: 2
+  ذ -> و: 2
+  ك -> س: 2
+  ظ -> ب: 1
+  ذ -> ش: 1
+
+CONFIDENCE-THRESHOLD SENSITIVITY (recomputed from raw frames, 320 attempts, stability ratio 0.6)
+  threshold  correct  wrong_accepted  no_letter  accuracy
+       0.30      197              44         79     61.6%
+       0.35      203              47         70     63.4%
+       0.40      202              46         72     63.1%
+       0.45      208              57         55     65.0%
+       0.50      168              99         53     52.5%
+       0.55      108             103        109     33.8%
+       0.60       88              88        144     27.5%
+       0.65       69              73        178     21.6%
+       0.70       56              62        202     17.5%
+  Raw frame-majority (no threshold, no stability rule): 227/320 = 70.9%
+  Frames per window: mean 35.6
