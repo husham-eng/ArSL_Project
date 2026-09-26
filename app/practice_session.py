@@ -39,12 +39,14 @@ Requirements beyond the core repo (see app/requirements_app.txt):
 import json
 import os
 import queue
+import re
 import random
 import shutil
 import sys
 import tempfile
 from collections import Counter
 import csv
+import subprocess
 import threading
 import time
 import tkinter as tk
@@ -72,6 +74,12 @@ if getattr(sys, "frozen", False):
 else:
     BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     WRITE_DIR = BASE_DIR
+
+# واجهة متعددة اللغات (عربي/إنجليزي/روسي) -- راجع app/i18n.py. تُترجم الواجهة
+# فقط؛ المحتوى الإشاري نفسه (الحروف، الكلمات، السيناريوهات، النطق) يبقى عربيًا.
+sys.path.insert(0, os.path.join(BASE_DIR, "app"))
+from i18n import LANGUAGES, Translator, load_language, save_language
+T = Translator(load_language(WRITE_DIR))
 
 APP_DIR = os.path.join(BASE_DIR, "app")
 REPO_ROOT = BASE_DIR
@@ -373,10 +381,22 @@ def find_working_camera(scan_range=CAMERA_SCAN_RANGE):
     return find_working_camera_from(scan_cameras(scan_range))
 
 
+_ARABIC_RUN = re.compile(r"[\u0600-\u06FF]+(?:[ \u00A0]+[\u0600-\u06FF]+)*")
+
+
 def ar(text: str) -> str:
     """Reshape + reorder Arabic text so it renders correctly in Tkinter
-    labels (Tkinter does not perform Arabic shaping/BiDi automatically)."""
-    return get_display(arabic_reshaper.reshape(text))
+    labels (Tkinter does not perform Arabic shaping/BiDi automatically).
+
+    In the Arabic interface the whole string is processed as before. In the
+    English/Russian interfaces the text is left-to-right, so only the Arabic
+    runs inside it (a letter, a word, a scenario question) are shaped and
+    reversed; running BiDi over the whole line would otherwise move numbers
+    such as "1 / 32" around an embedded Arabic letter."""
+    text = str(text)
+    if T.lang == "ar":
+        return get_display(arabic_reshaper.reshape(text))
+    return _ARABIC_RUN.sub(lambda m: get_display(arabic_reshaper.reshape(m.group(0))), text)
 
 
 def rgb_to_grayscale_3ch_pil(pil_img: Image.Image) -> Image.Image:
@@ -701,10 +721,10 @@ class PracticeApp(ctk.CTk):
         # ---- hint strip: sequential hand-sign images guiding how to sign the target word ----
         hint_header = ctk.CTkFrame(left, fg_color="transparent")
         hint_header.grid(row=0, column=0, sticky="ew", padx=10, pady=(10, 0))
-        ctk.CTkLabel(hint_header, text=ar("دليل الإشارة المتسلسل:"), font=("Tahoma", 14, "bold")).pack(side="right")
+        ctk.CTkLabel(hint_header, text=ar(T("hint_title")), font=("Tahoma", 14, "bold")).pack(side="right")
         self.hint_toggle_var = ctk.BooleanVar(value=True)
         ctk.CTkCheckBox(
-            hint_header, text=ar("إظهار"), variable=self.hint_toggle_var,
+            hint_header, text=ar(T("show")), variable=self.hint_toggle_var,
             command=self._render_hint_strip, width=20,
         ).pack(side="right", padx=10)
         # الوضع الحر: يستبدل السيناريوهات الجاهزة وشريط الدليل بمحادثة حقيقية
@@ -712,9 +732,19 @@ class PracticeApp(ctk.CTk):
         # والمُشير يعبّر عمّا يريده هو، لا عن إجابة معروفة مسبقًا للنظام.
         self.free_mode_var = ctk.BooleanVar(value=False)
         ctk.CTkCheckBox(
-            hint_header, text=ar("🎙️ الوضع الحر (تعرّف صوتي حقيقي)"), variable=self.free_mode_var,
+            hint_header, text=ar(T("free_mode")), variable=self.free_mode_var,
             command=self._on_free_mode_toggle, width=20,
         ).pack(side="right", padx=10)
+        # قائمة اللغة: تحفظ الاختيار في app_settings.json وتعيد تشغيل التطبيق
+        # (أبسط وأضمن من إعادة بناء كل عناصر الواجهة الحية وهي تعمل).
+        self._lang_display = {ar(name): code for code, name in LANGUAGES.items()}
+        self.language_menu = ctk.CTkOptionMenu(
+            hint_header, values=list(self._lang_display),
+            command=self._on_language_change, width=110,
+        )
+        self.language_menu.set(ar(LANGUAGES[T.lang]))
+        self.language_menu.pack(side="left", padx=(0, 4))
+        ctk.CTkLabel(hint_header, text=ar(T("language")), font=("Tahoma", 12)).pack(side="left", padx=(4, 4))
 
         self.hint_strip = ctk.CTkFrame(left, fg_color="#101010", height=140)
         self.hint_strip.grid(row=1, column=0, sticky="ew", padx=10, pady=(5, 5))
@@ -733,7 +763,7 @@ class PracticeApp(ctk.CTk):
         self.camera_label.configure(image=self._placeholder_img)
 
         ctk.CTkLabel(
-            camera_container, text=ar("مرجع كل الحروف (32):"),
+            camera_container, text=ar(T("ref_grid")),
             font=("Tahoma", 11, "bold"), text_color="#888888",
         ).pack(pady=(4, 0))
         # أفقيًا-قابلة للتمرير: الصور الآن أكبر 3 أضعاف (راجع
@@ -791,15 +821,13 @@ class PracticeApp(ctk.CTk):
         status_frame = ctk.CTkFrame(left, fg_color="transparent")
         status_frame.grid(row=3, column=0, sticky="ew", padx=10, pady=(0, 5))
         self.roi_hint_label = ctk.CTkLabel(
-            status_frame, text=ar(
-                "أخضر: استمر | سماوي: الحرف تسجّل | رمادي: لا يد مكتشفة | ✓ فوق الصورة: تأكد نهائيًا"
-            ),
+            status_frame, text=ar(T("roi_hint")),
             font=("Tahoma", 12), text_color="#7fbf7f",
         )
         self.roi_hint_label.pack(side="left", padx=10)
-        self.letter_status = ctk.CTkLabel(status_frame, text=ar("الحرف الحالي: —"), font=("Tahoma", 16, "bold"))
+        self.letter_status = ctk.CTkLabel(status_frame, text=ar(T("current_letter_empty")), font=("Tahoma", 16, "bold"))
         self.letter_status.pack(side="left", padx=10)
-        self.word_status = ctk.CTkLabel(status_frame, text=ar("الكلمة الحالية: —"), font=("Tahoma", 16, "bold"))
+        self.word_status = ctk.CTkLabel(status_frame, text=ar(T("current_word_empty")), font=("Tahoma", 16, "bold"))
         self.word_status.pack(side="left", padx=10)
         # عدّاد تنازلي مرئي لموعد إغلاق دورة الالتقاط الحالية (كل
         # CAPTURE_INTERVAL_SEC ثانية) -- يحدَّث كل إطار كاميرا بغضّ النظر عن
@@ -823,10 +851,10 @@ class PracticeApp(ctk.CTk):
 
         controls = ctk.CTkFrame(left, fg_color="transparent")
         controls.grid(row=5, column=0, sticky="ew", padx=10, pady=(0, 5))
-        self.camera_btn = ctk.CTkButton(controls, text=ar("ابدأ الكاميرا"), command=self.toggle_camera)
+        self.camera_btn = ctk.CTkButton(controls, text=ar(T("start_camera")), command=self.toggle_camera)
         self.camera_btn.pack(side="left", padx=5)
         self.next_camera_btn = ctk.CTkButton(
-            controls, text=ar("كاميرا أخرى"), command=self.cycle_camera_source,
+            controls, text=ar(T("other_camera")), command=self.cycle_camera_source,
             fg_color="#444444", hover_color="#5a5a5a",
         )
         self.next_camera_btn.pack(side="left", padx=5)
@@ -834,9 +862,9 @@ class PracticeApp(ctk.CTk):
             controls, text="", font=("Tahoma", 11), text_color="#999999"
         )
         self.camera_source_label.pack(side="left", padx=10)
-        ctk.CTkButton(controls, text=ar("إعادة تعيين الكلمة"), command=self.reset_word).pack(side="left", padx=5)
+        ctk.CTkButton(controls, text=ar(T("reset_word")), command=self.reset_word).pack(side="left", padx=5)
         ctk.CTkButton(
-            controls, text=ar("أنهِ الكلمة الآن"), command=self.finish_word_now,
+            controls, text=ar(T("finish_word")), command=self.finish_word_now,
             fg_color="#1F8B4C", hover_color="#27a85c",
         ).pack(side="left", padx=5)
 
@@ -847,16 +875,16 @@ class PracticeApp(ctk.CTk):
         controls_row2.grid(row=6, column=0, sticky="ew", padx=10, pady=(0, 10))
         # أزرار وضع التمرين (سيناريوهات جاهزة) — تُخفى في الوضع الحر لأنها
         # لا معنى لها بدون إجابة معروفة مسبقًا للنظام (راجع _on_free_mode_toggle).
-        self.prev_scenario_btn = ctk.CTkButton(controls_row2, text=ar("السيناريو السابق"), command=self.prev_scenario)
+        self.prev_scenario_btn = ctk.CTkButton(controls_row2, text=ar(T("prev_scenario")), command=self.prev_scenario)
         self.prev_scenario_btn.pack(side="left", padx=5)
-        self.next_scenario_btn = ctk.CTkButton(controls_row2, text=ar("السيناريو التالي"), command=self.next_scenario)
+        self.next_scenario_btn = ctk.CTkButton(controls_row2, text=ar(T("next_scenario")), command=self.next_scenario)
         self.next_scenario_btn.pack(side="left", padx=5)
         # زر الميكروفون — يظهر فقط في الوضع الحر (راجع _on_free_mode_toggle).
         # يسجّل STT_RECORD_SECONDS ثانية من الميكروفون الفعلي، ويرسلها لخدمة
         # Google Web Speech (يحتاج إنترنت)، ويستخدم النص المُتعرَّف عليه فعليًا
         # كسؤال المحاور وكسياق تصحيح الإملاء — راجع listen_for_question أدناه.
         self.mic_btn = ctk.CTkButton(
-            controls_row2, text=ar("🎤 استمع لسؤال المحاور"), command=self.listen_for_question,
+            controls_row2, text=ar(T("listen_question")), command=self.listen_for_question,
             fg_color="#c0392b", hover_color="#e74c3c",
         )
         # زر توثيق: يحفظ لقطة حقيقية من الجلسة الحية (الإطار الكامل مع مربع
@@ -864,7 +892,7 @@ class PracticeApp(ctk.CTk):
         # لاستخدامها كصور فعلية في قسم الأسلوب بالورقة البحثية، بدل أي
         # رسم توضيحي مصطنع. راجع capture_documentation_screenshot أدناه.
         ctk.CTkButton(
-            controls_row2, text=ar("📸 التقط لقطة للتوثيق"), command=self.capture_documentation_screenshot,
+            controls_row2, text=ar(T("screenshot")), command=self.capture_documentation_screenshot,
             fg_color="#6a4fb3", hover_color="#7f5fd6",
         ).pack(side="left", padx=5)
         # وضع الاختبار الميداني: يمرّر المتطوّع على الـ32 حرف بترتيب عشوائي
@@ -874,7 +902,7 @@ class PracticeApp(ctk.CTk):
         # العادي وحده (يسجّل التنبؤ فقط، بدون معرفة الحرف المقصود فعليًا).
         # راجع _start_field_test / _tick_capture_cycle أدناه.
         ctk.CTkButton(
-            controls_row2, text=ar("🧪 اختبار ميداني"), command=self.start_field_test,
+            controls_row2, text=ar(T("field_test")), command=self.start_field_test,
             fg_color="#1e8449", hover_color="#27ae60",
         ).pack(side="left", padx=5)
 
@@ -887,7 +915,7 @@ class PracticeApp(ctk.CTk):
         self.scenario_counter = ctk.CTkLabel(right, text="", font=("Tahoma", 14, "bold"))
         self.scenario_counter.grid(row=0, column=0, sticky="ew", pady=(10, 0))
 
-        self.chat_frame = ctk.CTkScrollableFrame(right, label_text=ar("سجل الحوار"))
+        self.chat_frame = ctk.CTkScrollableFrame(right, label_text=ar(T("chat_log")))
         self.chat_frame.grid(row=1, column=0, sticky="nsew", padx=10, pady=10)
         self.chat_frame.grid_columnconfigure(0, weight=1)
 
@@ -1009,7 +1037,7 @@ class PracticeApp(ctk.CTk):
             try:
                 self.predictor = FusionPredictor(CHECKPOINT_PATH, COLOR_CHECKPOINT_PATH)
                 self.model_used_label = "fusion"
-                self.letter_status.configure(text=ar("النموذج جاهز (رمادي + ملوّن مدمج) ✅"))
+                self.letter_status.configure(text=ar(T("model_ready_fusion")))
                 return
             except (FileNotFoundError, ImportError) as e:
                 # color_sign_resnet18_best.pt and/or src/color/color_sign_resnet18.py
@@ -1023,10 +1051,10 @@ class PracticeApp(ctk.CTk):
             try:
                 self.predictor = LetterPredictor(CHECKPOINT_PATH)
                 self.model_used_label = "grayscale_only"
-                self.letter_status.configure(text=ar("النموذج جاهز (رمادي فقط) ✅"))
+                self.letter_status.configure(text=ar(T("model_ready_gray")))
             except FileNotFoundError:
                 self.letter_status.configure(
-                    text=ar(f"⚠️ لم يُعثر على النموذج المدرَّب في: {CHECKPOINT_PATH}")
+                    text=ar(T("model_not_found", path=CHECKPOINT_PATH))
                 )
         threading.Thread(target=load, daemon=True).start()
 
@@ -1040,7 +1068,7 @@ class PracticeApp(ctk.CTk):
 
         scenario = self.scenarios[self.scenario_idx]
         self.scenario_counter.configure(
-            text=ar(f"السيناريو {self.scenario_idx + 1} / {len(self.scenarios)}")
+            text=ar(T("scenario_counter", i=self.scenario_idx + 1, n=len(self.scenarios)))
         )
         self._add_bubble(scenario["question"], sender="interlocutor")
         self._render_hint_strip()
@@ -1062,7 +1090,7 @@ class PracticeApp(ctk.CTk):
             self.mic_btn.pack(side="left", padx=5)
             for widget in self.chat_frame.winfo_children():
                 widget.destroy()
-            self.scenario_counter.configure(text=ar("🎙️ الوضع الحر — اضغط زر الميكروفون لبدء محادثة جديدة"))
+            self.scenario_counter.configure(text=ar(T("free_mode_start")))
         else:
             # العودة لوضع التمرين: يعيد كل شيء بالضبط لحالته المُختبَرة والموثَّقة
             self.mic_btn.pack_forget()
@@ -1079,7 +1107,7 @@ class PracticeApp(ctk.CTk):
         غير الرئيسي مباشرة)."""
         if not self.free_mode_var.get():
             return
-        self.mic_btn.configure(state="disabled", text=ar("🎙️ جارٍ الاستماع..."))
+        self.mic_btn.configure(state="disabled", text=ar(T("listening")))
         threading.Thread(target=self._listen_worker, daemon=True).start()
 
     def _listen_worker(self):
@@ -1088,7 +1116,7 @@ class PracticeApp(ctk.CTk):
             import speech_recognition as sr
         except ImportError as e:
             self.after(0, lambda: self._on_stt_result(
-                None, f"مكتبة ناقصة ({e}) — ثبّت: pip install SpeechRecognition sounddevice"
+                None, T("stt_missing_lib", e=e)
             ))
             return
 
@@ -1099,7 +1127,7 @@ class PracticeApp(ctk.CTk):
             )
             sd.wait()
         except Exception as e:
-            self.after(0, lambda: self._on_stt_result(None, f"تعذّر تسجيل الصوت (تحقق من الميكروفون): {e}"))
+            self.after(0, lambda: self._on_stt_result(None, T("stt_record_fail", e=e)))
             return
 
         recognizer = sr.Recognizer()
@@ -1112,20 +1140,20 @@ class PracticeApp(ctk.CTk):
             text = recognizer.recognize_google(audio_data, language=STT_LANGUAGE)
             self.after(0, lambda: self._on_stt_result(text, None))
         except sr.UnknownValueError:
-            self.after(0, lambda: self._on_stt_result(None, "لم يُلتقط كلام مفهوم — حاول مرة أخرى بصوت أوضح وأقرب للميكروفون"))
+            self.after(0, lambda: self._on_stt_result(None, T("stt_unclear")))
         except sr.RequestError as e:
-            self.after(0, lambda: self._on_stt_result(None, f"تعذّر الاتصال بخدمة التعرّف الصوتي (تحقق من الإنترنت): {e}"))
+            self.after(0, lambda: self._on_stt_result(None, T("stt_service_fail", e=e)))
 
     def _on_stt_result(self, text, error):
         """يعمل دائمًا على الـ thread الرئيسي (مُستدعى عبر self.after من
         _listen_worker)، فآمن هنا تحديث عناصر الواجهة مباشرة."""
-        self.mic_btn.configure(state="normal", text=ar("🎤 استمع لسؤال المحاور"))
+        self.mic_btn.configure(state="normal", text=ar(T("listen_question")))
         if error:
             self.scenario_counter.configure(text=ar(f"⚠️ {error}"))
             return
         self._current_question = text
         self._add_bubble(text, sender="interlocutor")
-        self.scenario_counter.configure(text=ar("🎙️ الوضع الحر — استمع لسؤال جديد في أي وقت"))
+        self.scenario_counter.configure(text=ar(T("free_mode_idle")))
 
     def _add_bubble(self, text, sender="interlocutor", caption=None):
         # "interlocutor" bubble aligns right (they speak first, standard chat convention here),
@@ -1159,7 +1187,7 @@ class PracticeApp(ctk.CTk):
         row = ctk.CTkFrame(self.chat_frame, fg_color="transparent")
         row.pack(fill="x", pady=1)
         ctk.CTkLabel(
-            row, text=ar(f"دورة {self._cycle_count}: {text}"),
+            row, text=ar(T("cycle_log", n=self._cycle_count, text=text)),
             font=("Tahoma", 11), text_color="#777777",
         ).pack(side="right", padx=14)
 
@@ -1174,14 +1202,14 @@ class PracticeApp(ctk.CTk):
         classification_log.db العادي (يسجّل التنبؤ فقط بدون معرفة الحرف
         المقصود فعليًا، فلا يكفي وحده لحساب دقة صحيحة)."""
         if self.camera_running is False:
-            self.letter_status.configure(text=ar("⚠️ ابدأ الكاميرا أولًا قبل الاختبار الميداني"))
+            self.letter_status.configure(text=ar(T("need_camera_ft")))
             return
         if self.predictor is None:
-            self.letter_status.configure(text=ar("⚠️ النموذج لسه ما جهز، انتظر شوي وحاول مرة ثانية"))
+            self.letter_status.configure(text=ar(T("model_not_ready")))
             return
 
         volunteer_id = simpledialog.askstring(
-            ar("اختبار ميداني"), ar("رقم/اسم المتطوّع:"), parent=self,
+            ar(T("ft_title")), ar(T("ft_prompt")), parent=self,
         )
         if not volunteer_id:
             return  # ألغى المستخدم، لا نبدأ شيء
@@ -1218,13 +1246,13 @@ class PracticeApp(ctk.CTk):
             tk.Label(cell, image=photo, bg="#101010").pack()
         ctk.CTkLabel(
             cell,
-            text=ar(f"أشِر بحرف: {ARASL_TO_ARABIC.get(key, '?')}  —  "
-                    f"{self._field_test_index + 1} / {len(self._field_test_sequence)}"),
+            text=ar(T("ft_target", letter=ARASL_TO_ARABIC.get(key, '?'),
+                      i=self._field_test_index + 1, n=len(self._field_test_sequence))),
             font=("Tahoma", 16, "bold"), text_color="#f1c40f",
         ).pack(pady=(4, 0))
 
         self.word_status.configure(
-            text=ar(f"🧪 اختبار ميداني — المتطوّع: {self._field_test_volunteer_id}")
+            text=ar(T("ft_status", vid=self._field_test_volunteer_id))
         )
 
     def _record_field_test_result(self, predicted_label, confidence, window_preds=()):
@@ -1302,11 +1330,11 @@ class PracticeApp(ctk.CTk):
             writer.writerows(self._field_test_results)
 
         self._add_bubble(
-            f"انتهى الاختبار الميداني — المتطوّع {self._field_test_volunteer_id}",
+            T("ft_done", vid=self._field_test_volunteer_id),
             sender="signer",
-            caption=f"الدقة: {n_correct}/{n} ({accuracy:.1%}) | حُفظت التفاصيل في: {out_path}",
+            caption=T("ft_done_caption", c=n_correct, n=n, acc=f"{accuracy:.1%}", path=out_path),
         )
-        self.word_status.configure(text=ar("الكلمة الحالية: —"))
+        self.word_status.configure(text=ar(T("current_word_empty")))
         self._render_hint_strip()  # يعيد شريط الدليل لوضعه الطبيعي (وضع التهجئة العادي)
 
     def next_scenario(self):
@@ -1332,7 +1360,7 @@ class PracticeApp(ctk.CTk):
         # يُعاد ضبطها هنا فقط — تُفعَّل من جديد لحظة بداية أول دورة التقاط
         # بالكلمة التالية (راجع _tick_capture_cycle)، بنفس الإعدادات.
         self._word_start_time = None
-        self.word_status.configure(text=ar("الكلمة الحالية: —"))
+        self.word_status.configure(text=ar(T("current_word_empty")))
         for btn in self._prediction_buttons:
             btn.destroy()
         self._prediction_buttons = []
@@ -1344,7 +1372,7 @@ class PracticeApp(ctk.CTk):
     def toggle_camera(self):
         if self.camera_running:
             self.camera_running = False
-            self.camera_btn.configure(text=ar("ابدأ الكاميرا"))
+            self.camera_btn.configure(text=ar(T("start_camera")))
             if self.cap is not None:
                 self.cap.release()
                 self.cap = None
@@ -1377,22 +1405,22 @@ class PracticeApp(ctk.CTk):
 
             if cap is None:
                 self.letter_status.configure(
-                    text=ar("⚠️ تعذّر العثور على كاميرا تعمل (تحقق من توصيل D435، أو راجع الطرفية لتفاصيل الفحص)")
+                    text=ar(T("no_camera_found"))
                 )
                 return
 
             self.cap = cap
             self.camera_running = True
             self._current_camera_index = idx
-            self.camera_btn.configure(text=ar("أوقف الكاميرا"))
+            self.camera_btn.configure(text=ar(T("stop_camera")))
             self._update_camera_source_label(idx, kind)
             self._camera_loop()
 
     def _update_camera_source_label(self, idx, kind):
         kind_ar = {
-            "color": ar("تيار ملوّن"),
-            "grayscale/IR-or-depth": ar("⚠️ تيار رمادي/IR — قد يكون خاطئًا"),
-            "manual": ar("محدد يدويًا"),
+            "color": ar(T("cam_color")),
+            "grayscale/IR-or-depth": ar(T("cam_ir")),
+            "manual": ar(T("cam_manual")),
         }.get(kind, kind or "")
         self.camera_source_label.configure(text=f"index {idx} · {kind_ar}")
 
@@ -1402,7 +1430,7 @@ class PracticeApp(ctk.CTk):
         (كلاهما قد يمر فحص 'غير أسود' حسب الإضاءة)."""
         candidates = [c for c in getattr(self, "_camera_candidates", []) if c["kind"] != "black"]
         if not candidates:
-            self.letter_status.configure(text=ar("⚠️ لا توجد كاميرات مرشّحة أخرى من آخر فحص"))
+            self.letter_status.configure(text=ar(T("no_other_cams")))
             return
         if self.cap is not None:
             self.cap.release()
@@ -1416,14 +1444,14 @@ class PracticeApp(ctk.CTk):
         chosen = candidates[next_pos]
         cap = cv2.VideoCapture(chosen["index"], chosen["backend"])
         if not cap.isOpened():
-            self.letter_status.configure(text=ar("⚠️ تعذّر فتح الكاميرا المرشّحة التالية"))
+            self.letter_status.configure(text=ar(T("cam_open_fail")))
             return
         cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
         cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
         self.cap = cap
         self._current_camera_index = chosen["index"]
         self.camera_running = True
-        self.camera_btn.configure(text=ar("أوقف الكاميرا"))
+        self.camera_btn.configure(text=ar(T("stop_camera")))
         self._update_camera_source_label(chosen["index"], chosen["kind"])
         self._camera_loop()
 
@@ -1523,7 +1551,7 @@ class PracticeApp(ctk.CTk):
         انتهى -- ثم يُنطق الكلمة المتراكمة (أو تُسقط بصمت لو ما تأكّد أي
         حرف إطلاقًا)، ثم يستأنف حلقة الكاميرا الطبيعية للكلمة التالية."""
         self._animating_end = True
-        self.letter_status.configure(text=ar("⏹ انتهى وقت الاكتشاف (10 ث)"))
+        self.letter_status.configure(text=ar(T("timeout_end")))
 
         h, w = frame_rgb.shape[:2]
         cx, cy = w / 2.0, h / 2.0
@@ -1541,8 +1569,8 @@ class PracticeApp(ctk.CTk):
                     # صريح بدل إسقاط صامت، عشان المستخدم يعرف بوضوح إن
                     # الدورة انتهت (لا يظل يظن إن البرنامج ما زال ينتظر).
                     self._add_bubble(
-                        "لم يتم التعرف", sender="signer",
-                        caption="لا حروف مؤكَّدة خلال 10 ثوانٍ",
+                        T("not_recognized"), sender="signer",
+                        caption=T("not_recognized_caption"),
                     )
                     self._speak_async("لم يتم التعرف")
                     self.reset_word()
@@ -1581,7 +1609,7 @@ class PracticeApp(ctk.CTk):
             )
             self._capture_window_preds.append((arabic_letter, confidence))
             self.letter_status.configure(
-                text=ar(f"الحرف الحالي: {arabic_letter} (ثقة {confidence:.2f})")
+                text=ar(T("current_letter", letter=arabic_letter, conf=f"{confidence:.2f}"))
             )
             # يُستخدم في تعليق الصورة عند التقاط لقطة توثيق (نفس القيم
             # المعروضة للمستخدم فعليًا في تلك اللحظة، لا قيم مُعاد حسابها).
@@ -1611,7 +1639,7 @@ class PracticeApp(ctk.CTk):
         interval = FIELD_TEST_INTERVAL_SEC if self._field_test_active else CAPTURE_INTERVAL_SEC
         remaining = max(0.0, interval - elapsed)
         self.cycle_countdown_label.configure(
-            text=ar(f"⏱ الدورة التالية خلال: {remaining:.1f} ث")
+            text=ar(T("next_cycle", sec=f"{remaining:.1f}"))
         )
         if elapsed < interval:
             return
@@ -1649,10 +1677,8 @@ class PracticeApp(ctk.CTk):
             if self.captured_slots else 0.0
         )
         self.word_status.configure(
-            text=ar(
-                f"الكلمة الحالية: {''.join(self.word_buffer)} "
-                f"(دورات: {len(self.captured_slots)}، تغطية: {coverage:.0%})"
-            )
+            text=ar(T("current_word", word="".join(self.word_buffer),
+                      cycles=len(self.captured_slots), cov=f"{coverage:.0%}"))
         )
 
         # دورة جديدة تبدأ فورًا من الصفر (العدّاد الصارم للكلمة لا يتأثر)
@@ -1668,7 +1694,7 @@ class PracticeApp(ctk.CTk):
         كانا متوفرين لتلك اللقطة بالذات.
         """
         if self._last_display_frame_rgb is None:
-            self.letter_status.configure(text=ar("⚠️ شغّل الكاميرا أولًا قبل التقاط لقطة توثيق"))
+            self.letter_status.configure(text=ar(T("need_camera_ss")))
             return
 
         os.makedirs(SCREENSHOTS_DIR, exist_ok=True)
@@ -1697,7 +1723,7 @@ class PracticeApp(ctk.CTk):
         with open(caption_path, "w", encoding="utf-8") as f:
             f.write("\n".join(caption_lines) + "\n")
 
-        self.letter_status.configure(text=ar(f"✅ حُفظت لقطة التوثيق في screenshots/{timestamp}_*"))
+        self.letter_status.configure(text=ar(T("screenshot_saved", ts=timestamp)))
 
     def _update_predictions(self):
         """يحدّث صف الاقتراحات الحية بناءً على بادئة الحروف المهجّاة لحد
@@ -1713,7 +1739,7 @@ class PracticeApp(ctk.CTk):
             self.predictions_label.configure(text="")
             return
 
-        self.predictions_label.configure(text=ar("اقتراحات:"))
+        self.predictions_label.configure(text=ar(T("suggestions")))
         for word in predictions:
             btn = ctk.CTkButton(
                 self.predictions_frame, text=ar(word), width=70,
@@ -1728,7 +1754,7 @@ class PracticeApp(ctk.CTk):
         الكلمة الحالية فورًا بنفس مسار _finalize_word تقريبًا، لكن بدون
         تصحيح إملائي (الكلمة أصلاً من القاموس، لا حاجة لمسافة تحرير)."""
         raw_word = "".join(self.word_buffer)
-        caption = f"من: {raw_word} | اقتراح مقبول قبل اكتمال التهجئة"
+        caption = T("caption_accepted", raw=raw_word)
         self._add_bubble(word, sender="signer", caption=caption)
         self._speak_async(word)
         self.reset_word()
@@ -1766,13 +1792,13 @@ class PracticeApp(ctk.CTk):
             raw_word, letter_confidence_coverage=coverage, stt_context_text=question,
         )
 
-        caption = (
-            f"من: {raw_word} | تغطية الاكتشاف: {coverage:.0%} | "
-            f"ثقة التخمين: {result.confidence_percent:.0f}% "
-            f"(حروف {result.letter_weight:.0%} + سياق {result.context_weight:.0%})"
+        caption = T(
+            "caption_guess", raw=raw_word, cov=f"{coverage:.0%}",
+            conf=f"{result.confidence_percent:.0f}",
+            lw=f"{result.letter_weight:.0%}", cw=f"{result.context_weight:.0%}",
         )
         if result.used_context:
-            caption += " | استُخدم السياق"
+            caption += T("caption_used_context")
         self._add_bubble(result.guessed_word, sender="signer", caption=caption)
 
         self._speak_async(result.guessed_word)
@@ -1895,6 +1921,21 @@ class PracticeApp(ctk.CTk):
                 print(f"[tts] speak failed for {text!r}: {e}")
             finally:
                 self.tts_queue.task_done()
+
+    def _on_language_change(self, choice):
+        """يحفظ اللغة المختارة ثم يعيد تشغيل التطبيق لتُطبَّق على كل عناصر
+        الواجهة. ممنوع أثناء الاختبار الميداني حتى لا تضيع بيانات المتطوّع."""
+        code = self._lang_display[choice]
+        if code == T.lang:
+            return
+        if self._field_test_active:
+            self.language_menu.set(ar(LANGUAGES[T.lang]))
+            self.letter_status.configure(text=ar(T("language_busy")))
+            return
+        save_language(WRITE_DIR, code)
+        args = [sys.executable] + (sys.argv[1:] if getattr(sys, "frozen", False) else sys.argv)
+        self.on_close()
+        subprocess.Popen(args, cwd=os.getcwd())
 
     def on_close(self):
         self.camera_running = False

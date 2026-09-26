@@ -37,3 +37,8 @@ Thumbs.db
 # Field test data: volunteer results are private; pilot data kept local
 field_test_results/
 field_test_rehearsal/
+
+# Local settings
+.venv/
+local_python_path.txt
+app_settings.json
