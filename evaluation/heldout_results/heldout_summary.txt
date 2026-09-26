@@ -1,0 +1,12 @@
+Data folder: C:\Users\DELL\Desktop\ArSL_Project\datasets\ArASL\archive (1)\ArASL_Database_54K_Final\ArASL_Database_54K_Final
+Held-out validation images: 10809 (seed 42, identical to training split)
+Accuracy: 0.9066  (stored in checkpoint: 0.9066)
+Macro avg     precision 0.9081  recall 0.9065  F1 0.9067
+Weighted avg  precision 0.9081  recall 0.9066  F1 0.9068
+Lowest-F1 classes:
+  gaaf (ق): P 0.75  R 0.69  F1 0.72  n=340
+  khaa (خ): P 0.72  R 0.81  F1 0.76  n=313
+  fa (ف): P 0.82  R 0.86  F1 0.84  n=412
+  ha (ه): P 0.83  R 0.85  F1 0.84  n=314
+  haa (ح): P 0.83  R 0.89  F1 0.86  n=333
+  jeem (ج): P 0.90  R 0.83  F1 0.86  n=292
